@@ -101,6 +101,19 @@ if [ $LLVM_VERSION_MAJOR -lt $MINIMUM_LLVM_VERSION ]; then
 	error "Unsupported LLVM version $LLVM_VERSION: must be 17, 18, 19, 20, 21 or 22"
 fi
 
+# Tell the source which targets this LLVM actually provides.
+#
+# src/llvm-c/Config/Targets.def is vendored and lists every LLVM target
+# unconditionally, so the headers cannot say what the LLVM being linked against
+# was configured with. An LLVM built for a subset of targets -- which is what
+# distributions and sandboxed SDK runtimes commonly ship -- then fails to link,
+# because llvm_backend.cpp names LLVMInitialize<Target>* symbols that do not
+# exist. Ask llvm-config instead, and let the source guard on the answer.
+for llvm_target in $($LLVM_CONFIG --targets-built); do
+	llvm_target_upper="$(echo "$llvm_target" | tr '[:lower:]' '[:upper:]')"
+	CXXFLAGS="$CXXFLAGS -DODIN_LLVM_HAS_${llvm_target_upper}=1"
+done
+
 case "$OS_NAME" in
 Darwin)
 	darwin_sysroot=
