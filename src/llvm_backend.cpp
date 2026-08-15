@@ -3051,6 +3051,17 @@ gb_internal void lb_generate_procedure(lbModule *m, lbProcedure *p) {
 }
 
 
+// Reached when the requested target exists in Odin but not in the LLVM this
+// compiler was linked against. That is a property of how LLVM was configured, so
+// the message points at the build rather than at the program being compiled.
+#define LB_MISSING_LLVM_TARGET(target_name) do {                                            \
+	gb_printf_err("This compiler was built against an LLVM without the %s target.\n",    \
+	              target_name);                                                         \
+	gb_printf_err("Rebuild Odin against an LLVM that provides it "                       \
+	              "(`llvm-config --targets-built` lists what is available).\n");         \
+	gb_exit(1);                                                                         \
+} while (0)
+
 gb_internal bool lb_generate_code(lbGenerator *gen) {
 	TIME_SECTION("LLVM Initializtion");
 
@@ -3062,48 +3073,74 @@ gb_internal bool lb_generate_code(lbGenerator *gen) {
 	lbModule *default_module = &gen->default_module;
 	CheckerInfo *info = gen->info;
 
+	// Each arm compiles only when the LLVM being linked against provides that target.
+	// src/llvm-c/Config/Targets.def is vendored and lists every LLVM target, so the
+	// headers will happily declare LLVMInitializeAArch64Target() against an LLVM with
+	// no AArch64 backend -- and the link then fails over a branch this build can never
+	// take. build_odin.sh asks `llvm-config --targets-built` and defines
+	// ODIN_LLVM_HAS_<TARGET> for each one present.
 	switch (build_context.metrics.arch) {
-	case TargetArch_amd64: 
+	case TargetArch_amd64:
 	case TargetArch_i386:
+	#if defined(ODIN_LLVM_HAS_X86)
 		LLVMInitializeX86TargetInfo();
 		LLVMInitializeX86Target();
 		LLVMInitializeX86TargetMC();
 		LLVMInitializeX86AsmPrinter();
 		LLVMInitializeX86AsmParser();
 		LLVMInitializeX86Disassembler();
+	#else
+		LB_MISSING_LLVM_TARGET("X86");
+	#endif
 		break;
 	case TargetArch_arm64:
+	#if defined(ODIN_LLVM_HAS_AARCH64)
 		LLVMInitializeAArch64TargetInfo();
 		LLVMInitializeAArch64Target();
 		LLVMInitializeAArch64TargetMC();
 		LLVMInitializeAArch64AsmPrinter();
 		LLVMInitializeAArch64AsmParser();
 		LLVMInitializeAArch64Disassembler();
+	#else
+		LB_MISSING_LLVM_TARGET("AArch64");
+	#endif
 		break;
 	case TargetArch_wasm32:
 	case TargetArch_wasm64p32:
+	#if defined(ODIN_LLVM_HAS_WEBASSEMBLY)
 		LLVMInitializeWebAssemblyTargetInfo();
 		LLVMInitializeWebAssemblyTarget();
 		LLVMInitializeWebAssemblyTargetMC();
 		LLVMInitializeWebAssemblyAsmPrinter();
 		LLVMInitializeWebAssemblyAsmParser();
 		LLVMInitializeWebAssemblyDisassembler();
+	#else
+		LB_MISSING_LLVM_TARGET("WebAssembly");
+	#endif
 		break;
 	case TargetArch_riscv64:
+	#if defined(ODIN_LLVM_HAS_RISCV)
 		LLVMInitializeRISCVTargetInfo();
 		LLVMInitializeRISCVTarget();
 		LLVMInitializeRISCVTargetMC();
 		LLVMInitializeRISCVAsmPrinter();
 		LLVMInitializeRISCVAsmParser();
 		LLVMInitializeRISCVDisassembler();
+	#else
+		LB_MISSING_LLVM_TARGET("RISCV");
+	#endif
 		break;
 	case TargetArch_arm32:
+	#if defined(ODIN_LLVM_HAS_ARM)
 		LLVMInitializeARMTargetInfo();
 		LLVMInitializeARMTarget();
 		LLVMInitializeARMTargetMC();
 		LLVMInitializeARMAsmPrinter();
 		LLVMInitializeARMAsmParser();
 		LLVMInitializeARMDisassembler();
+	#else
+		LB_MISSING_LLVM_TARGET("ARM");
+	#endif
 		break;
 	default:
 		GB_PANIC("Unimplemented LLVM target initialization");
