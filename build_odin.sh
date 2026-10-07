@@ -109,9 +109,16 @@ fi
 # distributions and sandboxed SDK runtimes commonly ship -- then fails to link,
 # because llvm_backend.cpp names LLVMInitialize<Target>* symbols that do not
 # exist. Ask llvm-config instead, and let the source guard on the answer.
+# The Linux link names the targets' components too, so it takes the same answer:
+# only those of arm, aarch64, x86, webassembly and riscv that the LLVM has.
+llvm_target_components=""
 for llvm_target in $($LLVM_CONFIG --targets-built); do
 	llvm_target_upper="$(echo "$llvm_target" | tr '[:lower:]' '[:upper:]')"
 	CXXFLAGS="$CXXFLAGS -DODIN_LLVM_HAS_${llvm_target_upper}=1"
+	case "$llvm_target" in
+	ARM|AArch64|X86|WebAssembly|RISCV)
+		llvm_target_components="$llvm_target_components $(echo "$llvm_target" | tr '[:upper:]' '[:lower:]')" ;;
+	esac
 done
 
 case "$OS_NAME" in
@@ -138,7 +145,7 @@ NetBSD)
 	;;
 Linux)
 	CXXFLAGS="$CXXFLAGS $($LLVM_CONFIG --cxxflags --ldflags)"
-	LDFLAGS="$LDFLAGS -lstdc++ -ldl $($LLVM_CONFIG --libs core native passes arm aarch64 x86 webassembly riscv --system-libs --libfiles)"
+	LDFLAGS="$LDFLAGS -lstdc++ -ldl $($LLVM_CONFIG --libs core native passes$llvm_target_components --system-libs --libfiles)"
 	# Copy libLLVM*.so into current directory for linking
 	# NOTE: This is needed by the Linux release pipeline!
 	# cp $(readlink -f $($LLVM_CONFIG --libfiles)) ./
